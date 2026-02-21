@@ -99,4 +99,57 @@ class MessageServiceTest {
         assertThat(page.getContent().get(0).content()).isEqualTo("Hi");
         assertThat(page.getTotalElements()).isEqualTo(1);
     }
+
+    @Test
+    void add_trimsContent() {
+        Session session = new Session();
+        session.setId(SESSION_ID);
+        session.setUserId(USER_ID);
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID)).thenReturn(Optional.of(session));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setId(UUID.randomUUID());
+            m.setCreatedAt(Instant.now());
+            return m;
+        });
+        AddMessageRequest request = new AddMessageRequest(MessageSender.user, "  trimmed  ", null);
+
+        MessageResponse response = messageService.add(USER_ID, SESSION_ID, request);
+
+        assertThat(response.content()).isEqualTo("trimmed");
+        verify(messageRepository).save(argThat(m -> "trimmed".equals(m.getContent())));
+    }
+
+    @Test
+    void add_withContext_savesContext() {
+        Session session = new Session();
+        session.setId(SESSION_ID);
+        session.setUserId(USER_ID);
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID)).thenReturn(Optional.of(session));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setId(UUID.randomUUID());
+            m.setCreatedAt(Instant.now());
+            return m;
+        });
+        com.fasterxml.jackson.databind.JsonNode context = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode().put("source", "doc1");
+        AddMessageRequest request = new AddMessageRequest(MessageSender.assistant, "Answer", context);
+
+        MessageResponse response = messageService.add(USER_ID, SESSION_ID, request);
+
+        assertThat(response.context()).isEqualTo(context);
+        verify(messageRepository).save(argThat(m -> context.equals(m.getContext())));
+    }
+
+    @Test
+    void getBySession_returnsEmptyPageWhenNoMessages() {
+        when(sessionRepository.existsByIdAndUserId(SESSION_ID, USER_ID)).thenReturn(true);
+        when(messageRepository.findBySessionIdAndSessionUserId(eq(SESSION_ID), eq(USER_ID), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        Page<MessageResponse> page = messageService.getBySession(USER_ID, SESSION_ID, PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getTotalElements()).isEqualTo(0);
+    }
 }

@@ -73,6 +73,16 @@ class MessageControllerIntegrationTest {
     }
 
     @Test
+    void listMessages_sessionNotFound_returns404() throws Exception {
+        mockMvc.perform(get("/api/v1/sessions/00000000-0000-0000-0000-000000000000/messages")
+                        .header("X-API-Key", API_KEY)
+                        .header("X-User-Id", USER_ID)
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void addMessage_validationError_returns400() throws Exception {
         String createResp = mockMvc.perform(post("/api/v1/sessions")
                         .header("X-API-Key", API_KEY)

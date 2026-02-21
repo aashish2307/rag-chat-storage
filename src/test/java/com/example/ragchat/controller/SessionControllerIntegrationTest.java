@@ -64,11 +64,45 @@ class SessionControllerIntegrationTest {
     }
 
     @Test
+    void getSession_returns200WhenExists() throws Exception {
+        String createResp = mockMvc.perform(post("/api/v1/sessions")
+                        .header("X-API-Key", API_KEY)
+                        .header("X-User-Id", USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateSessionRequest("Get Me"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String id = objectMapper.readTree(createResp).get("id").asText();
+
+        mockMvc.perform(get("/api/v1/sessions/" + id)
+                        .header("X-API-Key", API_KEY)
+                        .header("X-User-Id", USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.sessionId").value(id))
+                .andExpect(jsonPath("$.title").value("Get Me"))
+                .andExpect(jsonPath("$.favorite").value(false));
+    }
+
+    @Test
     void getSession_notFound_returns404() throws Exception {
         mockMvc.perform(get("/api/v1/sessions/00000000-0000-0000-0000-000000000000")
                         .header("X-API-Key", API_KEY)
                         .header("X-User-Id", USER_ID))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listSessions_withFavoriteParam() throws Exception {
+        mockMvc.perform(get("/api/v1/sessions")
+                        .header("X-API-Key", API_KEY)
+                        .header("X-User-Id", USER_ID)
+                        .param("favorite", "true")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").isNumber());
     }
 
     @Test
@@ -108,5 +142,15 @@ class SessionControllerIntegrationTest {
                         .header("X-API-Key", API_KEY)
                         .header("X-User-Id", USER_ID))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void createSession_withoutXUserId_returns400() throws Exception {
+        mockMvc.perform(post("/api/v1/sessions")
+                        .header("X-API-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateSessionRequest("No User"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("X-User-Id")));
     }
 }

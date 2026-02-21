@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
@@ -120,5 +121,96 @@ class SessionServiceTest {
 
         verify(sessionRepository).deleteById(id);
         verify(cacheEvictor).evictForUser(USER_ID);
+    }
+
+    @Test
+    void listByUser_returnsPageFromRepository() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Session session = new Session();
+        session.setId(UUID.randomUUID());
+        session.setUserId(USER_ID);
+        session.setTitle("Chat");
+        session.setFavorite(false);
+        session.setCreatedAt(Instant.now());
+        session.setUpdatedAt(Instant.now());
+        when(sessionRepository.findByUserId(eq(USER_ID), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(session), pageable, 1));
+
+        Page<SessionResponse> page = sessionService.listByUser(USER_ID, null, pageable);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).title()).isEqualTo("Chat");
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        verify(sessionRepository).findByUserId(USER_ID, pageable);
+    }
+
+    @Test
+    void listByUser_withFavorite_callsFindByUserIdAndFavorite() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(sessionRepository.findByUserIdAndFavorite(eq(USER_ID), eq(true), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        sessionService.listByUser(USER_ID, true, pageable);
+
+        verify(sessionRepository).findByUserIdAndFavorite(USER_ID, true, pageable);
+    }
+
+    @Test
+    void getById_returnsSessionWhenFound() {
+        UUID id = UUID.randomUUID();
+        Session session = new Session();
+        session.setId(id);
+        session.setUserId(USER_ID);
+        session.setTitle("Found");
+        session.setFavorite(true);
+        session.setCreatedAt(Instant.now());
+        session.setUpdatedAt(Instant.now());
+        when(sessionRepository.findByIdAndUserId(id, USER_ID)).thenReturn(Optional.of(session));
+
+        SessionResponse response = sessionService.getById(USER_ID, id);
+
+        assertThat(response.id()).isEqualTo(id);
+        assertThat(response.title()).isEqualTo("Found");
+        assertThat(response.favorite()).isTrue();
+    }
+
+    @Test
+    void update_updatesTitleAndFavoriteAndEvictsCache() {
+        UUID id = UUID.randomUUID();
+        Session session = new Session();
+        session.setId(id);
+        session.setUserId(USER_ID);
+        session.setTitle("Old");
+        session.setFavorite(false);
+        session.setCreatedAt(Instant.now());
+        session.setUpdatedAt(Instant.now());
+        when(sessionRepository.findByIdAndUserId(id, USER_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(Session.class))).thenAnswer(inv -> inv.getArgument(0));
+        UpdateSessionRequest request = new UpdateSessionRequest("New Title", true);
+
+        SessionResponse response = sessionService.update(USER_ID, id, request);
+
+        assertThat(response.title()).isEqualTo("New Title");
+        assertThat(response.favorite()).isTrue();
+        verify(sessionRepository).save(argThat(s -> "New Title".equals(s.getTitle()) && s.isFavorite()));
+        verify(cacheEvictor).evictForUser(USER_ID);
+    }
+
+    @Test
+    void update_ignoresNullTitle() {
+        UUID id = UUID.randomUUID();
+        Session session = new Session();
+        session.setId(id);
+        session.setUserId(USER_ID);
+        session.setTitle("Keep");
+        session.setFavorite(false);
+        session.setCreatedAt(Instant.now());
+        session.setUpdatedAt(Instant.now());
+        when(sessionRepository.findByIdAndUserId(id, USER_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(Session.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        sessionService.update(USER_ID, id, new UpdateSessionRequest(null, true));
+
+        verify(sessionRepository).save(argThat(s -> "Keep".equals(s.getTitle()) && s.isFavorite()));
     }
 }
