@@ -1,0 +1,26 @@
+# Run without PostgreSQL/Redis: H2 in-memory DB, Redis disabled.
+# Use: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+
+management:
+  health:
+    redis:
+      enabled: false
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:rag_chat;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+app:
+  api-key: ${API_KEY:local-dev-key}
